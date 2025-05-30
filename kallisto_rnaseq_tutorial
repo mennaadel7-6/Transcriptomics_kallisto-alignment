@@ -1,0 +1,285 @@
+
+
+#=============================================================================================================================================
+# 1. Create and Navigate to the Transcriptome Directory
+#=======================================================
+#This command creates a directory called 'transcriptome' and moves you into that directory.
+# It's important to organize your data, so everything related to this workflow is in one place.
+
+
+mkdir transcriptome    # Create the 'transcriptome' directory
+cd transcriptome       # Change directory to 'transcriptome'
+
+#============================================================================================================================================
+# 2. Download Transcriptome Reference
+#========================================
+# Use 'wget' to download the transcriptome reference file (human cDNA data from Ensembl).
+# This is a compressed file (".gz") containing the coding sequences of human genes.
+# 'gunzip' will decompress the downloaded file, so we can use it in later steps.
+
+
+wget ftp://ftp.ensembl.org/pub/release-101/fasta/homo_sapiens/cdna/Homo_sapiens.GRCh38.cdna.all.fa.gz
+
+
+# This downloads the human transcriptome in FASTA format (reference for gene expression analysis).
+
+# Decompress the downloaded file using gunzip
+
+
+gunzip Homo_sapiens.GRCh38.cdna.all.fa.gz   # Uncompress the file so we can work with it
+
+#=============================================================================================================================================================
+# 3. Download the Transcriptome Folder from Course Drive
+#===========================================================
+#You are instructed to download the transcriptome folder from a course drive (presumably containing raw RNA-seq data).
+
+
+unzip Transcriptome-20250112T203045Z-001.zip
+#unzipped folder will show files in another folder(named Transcriptome also but with capital T), cd Transcriptome to do next fastqc on all .fasta files
+
+
+# You can use tools like 'wget' or 'curl' to download data if a direct URL is provided, or use GUI file managers.
+# For example, if the folder is shared as a zipped file or a directory:
+# wget <URL-of-your-course-drive>   # Example to download data from a URL.
+# You should replace this line with actual instructions for downloading from your course drive if needed.
+
+#=========================================================================================================================================================
+# 4. Install Kallisto
+#======================
+# Kallisto is a tool used for quantifying gene expression from RNA-seq data. You have two installation options:
+
+# Option 1: Install Kallisto using Conda (a package manager for bioinformatics software).
+# Conda makes it easy to install software without worrying about dependencies.
+conda install -c bioconda kallisto  # Install Kallisto using Conda from the bioconda channel
+
+# Option 2: Install Kallisto from the source by cloning it from GitHub and compiling it manually.
+# This is an alternative if you prefer building the software yourself.
+git clone https://github.com/pachterlab/kallisto.git  # Clone the Kallisto source code from GitHub
+cd kallisto   # Move into the Kallisto source directory
+mkdir build   # Create a new directory for the build process
+cd build     # Move into the 'build' directory
+
+# Prepare to build Kallisto by using cmake, which configures the software.
+cmake ..  # important note below ##Configures Kallisto for building on your system
+
+
+#If Kallisto is installed via Conda: You don’t need to run cmake. Simply activate your Conda environment and use kallisto directly.
+#If building Kallisto from source: You need to be in the Kallisto source directory when running cmake. After that, you can build and install it as necessary.
+
+
+
+# Finally, use 'make' to compile Kallisto from source.
+make  # This compiles the source code into executable files
+
+#===========================================================================================================================================
+# 5. Index the Transcriptome Database
+#========================================
+# Kallisto requires an index of the transcriptome to work efficiently.
+# The 'index' command creates an index file from the reference transcriptome, which speeds up the quantification process.
+
+kallisto index -i human2.idx Homo_sapiens.GRCh38.cdna.all.fa
+
+# -i human2.idx: specifies the name of the index file (human2.idx).
+# Homo_sapiens.GRCh38.cdna.all.fa: specifies the reference transcriptome file (human cDNA data).
+
+#======================================================================================================================================================================================
+# 6. Quality Control on RNA-seq Data
+#=====================================
+#The raw RNA-seq data often needs to be cleaned to remove low-quality sequences or contaminants like adapters.
+# We first check the quality of the raw sequencing files using 'FastQC'.
+
+fastqc *.fastq  # note: it may be better to move the output to a named folder i create before using mkdir before this command. #Run FastQC on all the FASTQ files in the directory (you should have these files already).
+
+#=========================================================================================================================================================================================================================
+# 7. Trimming the Raw Data Using Trimmomatic
+#============================================= 
+#Trimmomatic is a tool that removes low-quality reads and adapter sequences from the raw data.
+# The command below uses Trimmomatic in paired-end mode (PE) to trim two FASTQ files (R1 and R2) simultaneously.
+# The output will be clean, trimmed reads (i.e., sequences with better quality).
+
+trimmomatic PE SRR1000_R1.fastq SRR1000_R2.fastq SRR1000_R1_trimmed.fq.gz SRR1000_R1_drop.fq.gz \
+SRR1000_R2_trimmed.fq.gz SRR1000_R2_drop.fq.gz \
+ILLUMINACLIP:./adaptor.fa:2:30:10:2:True LEADING:3 TRAILING:3 MINLEN:100
+
+
+#...............................................................................................................
+# Explanation of the Trimmomatic options:
+# - PE: Paired-end mode, where you have two input files (R1 and R2) and output files (trimmed and dropped reads).
+# - ILLUMINACLIP: Removes adapter sequences using an adapter file (adaptor.fa).
+# - LEADING:3 TRAILING:3: Trims bases with low quality at the start or end of reads.
+# - MINLEN:100: Discards reads that are shorter than 100 bases after trimming.
+# .......................................................................................................................
+#.          Breakdown:
+#.  trimmomatic PE
+#.  trimmomatic is the program being run (Trimmomatic), which is used for trimming sequences.
+#.  PE stands for paired-end. This indicates that you're working with two files that correspond to paired-end reads. Each read has a forward (R1) and reverse (R2) counterpart.
+#.
+#.  SRR1000_R1.fastq SRR1000_R2.fastq
+#.  SRR1000_R1.fastq and SRR1000_R2.fastq are the input files. These contain your raw paired-end RNA-seq data:
+#.  R1 corresponds to the forward reads.
+#.  R2 corresponds to the reverse reads.
+#.
+#.  SRR1000_R1_trimmed.fq.gz SRR1000_R1_drop.fq.gz
+#.  These are the output files for the forward reads:
+#.  SRR1000_R1_trimmed.fq.gz will contain the trimmed (cleaned) version of the forward reads.
+#.  SRR1000_R1_drop.fq.gz will contain the reads that were discarded because they didn’t pass the quality filter.
+#.
+#.  SRR1000_R2_trimmed.fq.gz SRR1000_R2_drop.fq.gz
+#.These are the output files for the reverse reads:
+#.  SRR1000_R2_trimmed.fq.gz will contain the trimmed (cleaned) reverse reads.
+#.  SRR1000_R2_drop.fq.gz will contain the discarded reverse reads.
+#.
+#.  ILLUMINACLIP:./adaptor.fa:2:30:10:2:True
+#.  This is an adapter trimming step, which removes adapter sequences from the reads. When sequencing RNA, the adapters are often added during library preparation, and they can interfere with downstream analysis.
+#.
+#.     ILLUMINACLIP: This option tells Trimmomatic to use a file containing adapter sequences and remove them from the reads.
+#      
+#.     ./adaptor.fa: This is the path to the file that contains the adapter sequences. Note that  adaptor.fa was extracted from the zip file earlier, so this is the path to that file. It tells Trimmomatic to use these sequences to find and trim adapter contamination from your reads.
+#.
+#.     2:30:10:2:True: These are parameters that fine-tune the adapter clipping process. They represent:
+#.        2: Seed mismatches — the maximum number of mismatches allowed between the adapter and the read for it to still be considered a match. If an adapter has 2 or fewer mismatches, it will be clipped.
+#.        30: Palindrome clip threshold — the maximum allowed number of mismatches in a palindrome adapter sequence (used to find adapter pairs).
+#.        10: Simple clip threshold — the number of mismatches allowed in a "simple" adapter sequence.
+#.        2: The minimum adapter length that should be considered as an adapter sequence for clipping.
+#.        True: If this is set to True, it enables the "adapter removal" process, ensuring adapters are clipped.
+#.     
+#.     LEADING:3 TRAILING:3
+#.     These options tell Trimmomatic to trim low-quality bases from the beginning (LEADING) and the end (TRAILING) of the reads:
+#. 
+#.     LEADING:3: Trim bases from the start of the read if their quality score is below 3. Quality scores are usually Phred scores, where a higher score means a higher quality base.
+#.     TRAILING:3: Trim bases from the end of the read if their quality score is below 3.
+#.     
+#.     MINLEN:100
+#.     MINLEN:100: This option removes any read that is shorter than 100 bases after trimming. This helps ensure that only high-quality, meaningful reads are retained.
+#...........................................................................................................
+#.        summary of trimmomatic command
+#. Input files: Two .fastq files (forward and reverse reads).
+#. Output files: Four files — trimmed and discarded reads for both forward and reverse.
+#. Adapter trimming: Using an adapter file (adaptor.fa) to remove adapter sequences.
+#. Quality trimming: Removing low-quality bases from both ends of the reads.
+#. Read length filtering: Any read that becomes shorter than 100 bases after trimming will be discarded.
+#...........................................................................................................
+
+
+#=====================================================================================================================================
+# 8. Quality Control on Trimmed Data
+#=======================================
+# After trimming, it's important to check the quality of the cleaned reads.
+# FastQC is used again to ensure the trimming process worked well and that the remaining sequences are of good quality.
+
+
+
+fastqc *_trimmed.fq.gz  #important note: it is better to put out put in a directly in the code.# Run FastQC on the newly created trimmed FASTQ files
+
+#better code is below: 
+
+mkdir fastqc_trimmedreports
+                   for file in *_trimmed.fq.gz; do
+    fastqc $file -o ./fastqc_trimmedreports/
+done
+
+
+#note to consider
+#Compressed files (e.g., .fq.gz) are usually the better choice for most NGS transcriptomics work. Tools like Kallisto, Salmon, and others are optimized to handle compressed files efficiently.
+#Unzipping is not required unless specifically needed by a tool or you encounter a problem that requires uncompressed input.
+
+
+#============================================================================================================================================
+# 10. Quantify Gene Expression Using Kallisto
+#============================================
+# Now that you have prepared the data (indexed the transcriptome and cleaned the RNA-seq data),
+# you can use Kallisto to estimate gene expression levels based on the trimmed paired-end RNA-seq data.
+
+
+#check path to index file. index file location and homosapiens.. can be moved with other files together or provide full path of index file
+
+
+mv human2.idx ~/transcriptome/Transcriptome/
+
+mv Homo_sapiens.GRCh38.cdna.all.fa ~/transcriptome/Transcriptome/
+
+
+
+
+# The command below runs Kallisto for quantification:
+
+
+/home/menna/miniconda3/bin/kallisto quant -i human2.idx -o SRR1000 ./SRR1000_R1_trimmed.fq.gz ./SRR1000_R2_trimmed.fq.gz
+
+#===============================================================================================
+#10- run the script for the second sample SRR1001
+#=======================================================
+#11- put output reads in csv file better (explained later)
+#=====================================================
+
+#..............................................................................................................................
+#.
+# Explanation of the Kallisto command:
+#
+# Kallisto: The software tool you're using for quantification.
+# /home/menna/miniconda3/bin/kallistois the path to the Kallisto executable. You are calling the program from its location, rather than from a system-wide install.
+#
+#  quant: Tells Kallisto to perform quantification.   #Kallisto uses a method called pseudoalignment to quickly determine which genes or transcripts your RNA-seq reads map to, and how many reads map to each gene or transcript.
+#
+#  -i human2.idx: Specifies the index file created earlier.
+#
+#  -o SRR1000: Specifies the output directory where Kallisto will store the results (e.g., SRR1000).
+#
+#  ./SRR1000_R1_trimmed.fq.gz and ./SRR1000_R2_trimmed.fq.gz: The paired-end, trimmed FASTQ files containing the cleaned sequencing data.
+#.....................................................................................................................................................
+
+
+#.........................................................................................................................................................................................
+#
+#final result after running the script
+#
+# (base) menna@menna-VirtualBox:~/transcriptome/Transcriptome$ /home/menna/miniconda3/bin/kallisto quant -i human2.idx -o SRR1000 ./SRR1000_R1_trimmed.fq.gz ./SRR1000_R2_trimmed.fq.gz
+#
+#[quant] fragment length distribution will be estimated from the data
+#[index] k-mer length: 31
+#[index] number of targets: 191,887
+#[index] number of k-mers: 111,187,137
+#[index] number of equivalence classes: 778,047
+#[quant] running in paired-end mode
+#[quant] will process pair 1: ./SRR1000_R1_trimmed.fq.gz
+#                             ./SRR1000_R2_trimmed.fq.gz
+#[quant] finding pseudoalignments for the reads ... done
+#[quant] processed 60,529 reads, 44,310 reads pseudoaligned
+#[quant] estimated average fragment length: 0
+#[   em] quantifying the abundances ... done
+#[   em] the Expectation-Maximization algorithm ran for 732 rounds
+#
+#................................................................................................................
+#  explanation of results
+#==================================================================================================================
+# What’s Happening When You Run This Command?
+#
+#   Input data: Kallisto will take your RNA-seq data files (SRR1000_R1_trimmed.fq.gz and SRR1000_R2_trimmed.fq.gz) and use the index (human2.idx) to look up which parts of the genome (genes) the reads match to.
+#
+#   Quantification: Kallisto uses its own algorithm to count how many times each gene is "seen" in the RNA-seq data. The result is an estimate of how much RNA comes from each gene. This is called gene expression quantification.
+#
+#   Output: Kallisto creates a folder called SRR1000 and stores the results there. These results will include:
+#      abundance.tsv: This file contains the actual quantification results. It will tell you how much RNA (in TPM - Transcripts Per Million) is associated with each gene.    
+# run_info.json: This file contains information about the run, such as parameters used and other metadata.
+#
+# Output Example (What’s in the abundance.tsv file?)
+#
+# Inside the abundance.tsv file, you’ll find a table with the following columns:
+#
+#    Target ID: This is the gene or transcript identifier.
+#    Length: The length of the gene or transcript.
+#    Effective Length: The effective length used for quantification (taking into account the fragment length).
+#    TPM (Transcripts Per Million): This is a normalization of the gene expression count, which helps compare gene expression across different samples or conditions.
+#    NumReads: This shows the raw number of reads that were mapped to that gene.
+#
+# What’s Happening Right Now?
+#
+# You successfully ran the Kallisto command, and the tool is processing your data. Here's what the output tells you:
+#
+#    Indexing and Fragment Length Estimation: Kallisto is estimating the fragment length distribution from your data. Fragment length refers to the average size of the RNA fragments that were sequenced. Kallisto uses this information to make more accurate quantifications.
+#    Building the Index: It’s also working with the pre-built index (human2.idx), which has information about human genes, so it knows how to map your RNA-seq data to the right genes.
+#
+# What’s Next?
+#
+# After this process finishes, you should have the quantification results in the SRR1000 folder. You can then open the abundance.tsv file to see the expression levels of the genes in your RNA-seq data.
+#.........................................................................................................................................................................................................................
